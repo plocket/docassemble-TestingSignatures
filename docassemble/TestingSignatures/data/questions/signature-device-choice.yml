@@ -1,0 +1,212 @@
+metadata:
+  title: Device choice for signature
+  short: Signature via device
+
+# DEVELOPER: Include this at the top of your script before your other code.
+# You can customize this and override the text and code in here.
+# Shared content and functionality will continue to be worked on and improved,
+# as well as translated, so it might be worth keeping what you can.
+
+# TODO: Prevent original device from accidentally opening the signature page?
+# TODO: Allow user to explicitly go back to their original device.
+# TODO: Add error message for wrong number
+# TODO: Provide email option too?
+# TODO: `task_not_yet_performed('send signature link')` - allow only one sending of the link?
+---
+# If needed, offer them a way to send the link to another device.
+# Direct them to the signature.
+id: generic signature flow
+#event: x.sent_to_signature
+#reconsider: True is not sufficient
+#reconsider:
+#  - x.started_on_phone
+generic object: Individual
+code: |
+  
+  #if action_argument() and action_argument('code'):
+  #  x_name = 
+  
+  log( '5' )
+  # WAT: This doesn't get logged after the signature unless the terminal case below exists. How?
+  #log('1', 'console')
+  #log( x_name )
+  #log( defined( x_name + '.signature' ) )
+
+  # ENDING CONDITION
+  if defined( x_name + '.signature' ):
+    log( 'terminal case' )
+    x.sent_to_signature = True
+    force_ask( x_name + '.status' )
+
+  # When would device header not exist? A bot? An error?
+  device_exists = not device() is None
+  log( '6' )
+  # If header exists and it's mobile/tablet/bot or user wants this device
+  if (device_exists and not device().is_pc) or x.signature_choice == 'this device':
+    log( '7' )
+    log( x.instanceName )
+    # Idempotency issue here, but why? Causes a name/w/e exception. Where above here do we lose the context or w/e?
+    # TODO: Put `willing_to_sign` in here?
+    #log('to signature', 'console')
+    #log( 'to signature' )
+    x.signature  # logic for pre-defining this became obstructive
+    log( '8' )
+    x.has_signed = True
+    log( '9' )
+    reconsider( x_name + '.signature_flow_complete' )
+    log( '10' )
+    reconsider( x_name + '.sent_to_signature' )
+    log( '11' )
+    #x.sent_to_signature = True
+  
+  # if it's a PC
+  else:
+    x.saw_link_sending_options
+    if defined( x_name + '.mobile_number' ) and x.mobile_number:
+      x.send_sms_signature_link  # DEVELOPER: Define this
+
+      #log( 'gonna ask wait', 'console' )
+      # When the user is on the wait page and the form has been signed, no further logs are printed in the console. What gives? Always involveds `willing_to_sign`
+      x.has_waited_for_signature
+      #log( x.has_waited_for_signature, 'console' )
+      if x.has_waited_for_signature is True:
+        #log( defined( x_name + '.signature' ), 'console' )
+        if defined( x_name + '.signature' ):
+          # This never gets in here somehow
+          #log( 'to status', 'console' )
+          force_ask( x_name + '.status' )
+        else:
+          #log( 'wait again', 'console' )
+          undefine( x_name + '.has_waited_for_signature' )
+          # nts: events don't get defined, so they don't need to be redefined
+          # but this causes an infinite loop
+          #x.sent_to_signature
+          reconsider( x_name + '.sent_to_signature' )
+      
+      # Asking to change devices. No, the name is not particularly clear.
+      else:
+        undefine( x_name + '.signature_choice' )
+        undefine( x_name + '.saw_link_sending_options' )
+        undefine( x_name + '.wants_a_text' )
+        undefine( x_name + '.mobile_number' )
+        undefine( x_name + '.send_sms_signature_link' )
+        undefine( x_name + '.has_waited_for_signature' )
+        #x.sent_to_signature
+        reconsider( x_name + '.sent_to_signature' )
+---
+event: x.revise_signature_device
+generic object: Individual
+code: |
+  x_name = x.instanceName
+
+  #if not action_argument() is None:
+  #  if action_argument('changed_mind') == 'yes':
+      # 'this device' or 'mobile'
+  undefine( x_name + '.signature_choice' )
+  undefine( x_name + '.saw_link_sending_options' )
+  undefine( x_name + '.mobile_number' )
+  undefine( x_name + '.send_sms_signature_link' )
+  undefine( x_name + '.has_waited_for_signature' )
+  #x.sent_to_signature
+  reconsider( x_name + '.sent_to_signature' )
+
+  #  elif action_argument('changed_mind') == 'no':
+  #    force_ask( x_name + '.has_waited_for_signature' )
+---
+id: signature device choice
+generic object: Individual
+decoration: file-signature
+question: |
+  ${ device_choice_question_title }
+subquestion: |
+  ${ device_choice_subquestion }
+field: x.signature_choice  # For `buttons:` below
+buttons:  
+  - Sign on my phone: phone
+    image: mobile-alt
+  - Sign on this computer: this device
+    image: desktop
+continue button field: x.saw_device_choice
+script: |
+  <script>
+    $(".da-field-buttons > div > .btn-da-custom").last().after("<br>")
+    $(".da-field-buttons > div > .btn-da-custom").first().before("<br>")
+  </script>
+---
+id: signature device choice question
+#generic object: Individual
+template: device_choice_question_title
+content: |
+  Sign your court forms
+---
+id: signature device choice subquestion
+#generic object: Individual
+template: device_choice_subquestion
+content: |
+  Your forms are almost ready. You need to sign them first. Use the mouse or touchpad on your computer or sign with your finger on your phone. 
+   
+  You can send the forms to someone else to sign if you choose the "phone" option.
+---
+id: provide phone signature link
+# DEVELOPER: You need to define `x.interview_url_as_qr` with `interview_url_as_qr()`.
+generic object: Individual
+question: |
+  ${ interview_link_for_mobile_question_title }
+subquestion: |
+  ${ interview_link_for_mobile_subquestion }
+fields:
+  - note: |
+      <center>
+      ${ x.interview_url_as_qr }
+      </center>
+  - Text me a link instead: x.wants_a_text
+    datatype: yesnowide
+  - Cell phone number: x.mobile_number
+    datatype: phone
+    show if: x.wants_a_text
+help: |
+  Many smartphones will automatically find the picture on this screen when you use the camera app. The link may "float" up from the screen into a small icon you can tap. If your phone does not do this, text yourself a link instead.
+
+continue button field: x.saw_link_sending_options
+---
+id: interview link for mobile
+#generic object: Individual
+template: interview_link_for_mobile_question_title
+content: |
+  Sign your forms on your phone
+---
+id: interview link for mobile
+#generic object: Individual
+template: interview_link_for_mobile_subquestion
+content: |
+  1. Open the camera app or barcode reader app on your phone.
+  1. Point it at the screen.
+  1. Tap the link icon that appears on the camera screen.
+  1. Tap ${word("Next")} on your phone.
+  1. Sign in the box.
+  1. Come back here and tap ${word("Next")} when you are done.
+---
+id: waiting for signature on other device
+generic object: Individual
+question: |
+  ${ wait_for_device_signature_question_title }
+subquestion: |
+  ${ wait_for_device_signature_subquestion }
+field: x.has_waited_for_signature
+buttons:
+  - "I want to go back": False
+  - "I have signed the form": True
+---
+id: generic waiting for device title
+generic object: Individual
+template: wait_for_device_signature_question_title
+content: |
+  Tap to continue after signing your form on your other device
+---
+id: generic waiting for device subquestion
+generic object: Individual
+template: wait_for_device_signature_subquestion
+content: |
+  % if defined( x.instanceName + '.mobile_number' ):
+  If you think you wrote the wrong phone number, you can go back and write a new one.
+  % endif

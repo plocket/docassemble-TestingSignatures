@@ -1,0 +1,323 @@
+# TODO:
+# - Many screens/pieces of text should be customizable
+# TODO: On court approved forms, should one user be able to send it to the court once everyone has signed it? Maybe that is out of scope for this functionality.
+# TODO: Change `signatories` to `not_present_signers`.
+# TODO: Add a 'loading' indicator for when 'Check again' is tapped.
+metadata:
+  title: Multiple signatures
+  short: Signature
+  documentation: https://docassemble.org/docs/recipes.html#multisignature
+---
+modules:  
+  - docassemble.VirtualCourtToolbox.shortenURL
+---
+include:
+  - signature-device-choice.yml
+---
+mandatory: True
+code: |
+  multi_user = True
+---
+#mandatory: True
+#code: |
+#  # this is where process action was, but can't be in here now
+#  force_ask('unauthorized')
+---
+code: |
+  emails_sent
+  send_for_codefendant_signatures = True
+---
+code: |
+  users[0].code
+  signatories.gather()
+  background_action('send_out_for_signature')
+  emails_sent = True
+---
+id: gather signatories
+code: |
+  for codefendant in codefendants:
+    signatories[codefendant.code] = codefendant
+  signatories[ users[0].code ] = users[0]
+  signatories.gathered = True
+---
+id: send request for signatures
+event: send_out_for_signature  # TODO: make plural
+code: |
+  for codefendant in codefendants:
+    codefendant.notified
+  users[0].notified
+  # Let the background_action know this background action is
+  # done. Don't do something else or send back any data.
+  background_response()
+---
+comment: |
+  =============================
+  USER
+  =============================
+---
+# Now set by the user outside of this flow
+#code: |
+#  users[0].signature_date = today()
+---
+# The status page will currently just say to wait for others to sign
+code: |
+  told_to_wait = True
+  # Makes sure users[0].status is the only page the user can see.
+  force_ask('users[0].status')
+---
+id: send user email
+code: |
+  send_email(to=users[0], template=initial_email_template)
+  users[0].notified = True
+---
+id: user email before signatures
+template: initial_email_template
+subject: |
+  Your Eviction Moratorium is out for signature.
+content: |
+  ${ users[0] },
+
+  % if codefendants.number() == 1:
+  We have e-mailed your codefendant to ask for a signature on the Eviction Moratorium.
+
+  We will e-mail you when the codefendant has signed, but in the meantime you can [check the status].
+  
+  % else:
+  I have e-mailed your codefendants to request that they sign the Eviction Moratorium.
+
+  We will e-mail you when all the codefendants have signed.  You can check the status of your document to see who still has not signed.
+  % endif
+
+  [Check the status of the signatures]: ${ interview_url_action('status_page', code=users[0].code) }
+---
+# TODO: Is the generic one sufficient for the user object as well?
+id: set interview's user id
+code: |
+  import random
+  import string
+  users[0].code = ''.join(random.choice(string.ascii_lowercase) for i in range(10))
+  log( 'user code' )
+  log( users[0].code )
+---
+id: ensure authorize user
+event: status_page
+code: |
+  if action_argument('code') != users[0].code:
+    force_ask('unauthorized')
+  force_ask('users[0].status')
+---
+id: 404
+event: unauthorized
+code: |
+  response('Page not found', response_code=404)
+---
+id: if all signed send email
+# Is requested when people check on the status of the signatures
+code: |
+  all_signed = True
+  for signer in all_signers:
+    reconsider( signer.instanceName + '.signature_flow_complete' )
+    if not signer.signature_flow_complete:
+      all_signed = False
+      break
+
+  if all_signed:
+    final_email_sent
+    all_signatures_in = True
+  else:
+    all_signatures_in = False
+---
+# TODO: Check if user email is going to be required in this flow
+code: |
+  background_action('send_final_email')
+  final_email_sent = True
+---
+event: send_final_email
+code: |
+  if defined( 'users[0].email' ) and users[0].email:
+    send_email(to=users[0], template=final_email_template, attachments=motion_to_dismiss_for_non_essential_eviction)
+  background_response()
+---
+id: all signed email template
+reconsider:
+  - final_form
+template: final_email_template
+subject: Your Eviction Moratorium has been signed by all parties
+content: |
+  ${ users[0] },
+
+  Your Eviction Moratorium has now been signed by all of your codefendants.
+  
+  You can [tap to see the signed document](${ final_form.pdf.url_for() })
+---
+comment: |
+  =============================
+  Codefendants
+  =============================
+---
+# Triggered with codefendants[i].notified
+# TODO: put `.notified` outside of `if` statement
+# If this is called from a background task and it results in
+# an exception caused by an undefined variable, then .notified
+# would not be set, but it would not cause a loop. It would error.
+code: |
+  if codefendants[i].send_method == 'text': 
+    message_sent_success = send_sms(task='send codefendant signature link', to=codefendants[i].mobile_number,template=codefendants[i].sms_template)
+    codefendants[i].notified = True
+  else:
+    message_sent_success = send_email(to=codefendants[i], template=codefendants[i].email_template)
+    codefendants[i].notified = True
+---
+id: generic send sms link
+generic object: Individual
+code: |
+  result = send_sms(task='send sms signature link', to=x.mobile_number, template=x.sms_template)
+  x.send_sms_signature_link = True
+---
+id: sms template multiuser
+generic object: Individual
+template: x.sms_template
+content: |
+  Dear ${ x },
+  Your signature needed on a document for ${ users[0] }.  
+  ${ y.shortenedURL }
+---
+id: codefendant email
+template: codefendants[i].email_template
+subject: |
+  Your signature needed on a document for ${ users[0] }
+content: |
+  Dear ${ codefendants[i] },
+
+  You are requested to sign a sworn statement attesting that ${ users[0] } TODO: WHAT ARE THEY ATTESTING.
+
+  [Tap here to see the document you are being asked to sign](${ motion_to_dismiss_for_non_essential_eviction.pdf.url_for() }).
+
+  [Tap here to sign the thing](${ codefendants[i].sign_url })
+---
+# TODO: Change '.code' to '.signer_id'
+# A randomized ID for the individual so the interview can tell which person they are when they use a link to sign the document.
+id: set interview's id for remaining individuals
+generic object: Individual
+code: |
+  import random
+  import string
+  x.code = ''.join(random.choice(string.ascii_lowercase) for i in range(10))
+  log( x.instanceName + ' code' )
+  log( x.code )
+---
+id: shorten codefendant url
+generic object: Individual
+code: |
+  y = shortenMe(x.sign_url)
+---
+id: codefendant signature url
+generic object: Individual
+code: |
+  x.sign_url = interview_url_action('request_signature', code=x.code)
+---
+id: signatories flow
+# terminal case: .has_signed is True
+# case 1: has arrived from email or from interview
+# case 2: has arrived on phone from link or interview
+event: request_signature
+code: |
+  # No new code gets run after a `force_ask`
+  log( '1' )
+  if action_argument('code') not in signatories:
+    force_ask('unauthorized')
+
+  signer = signatories[action_argument('code')]
+  s_name = signer.instanceName
+
+  log( s_name + ' code in force' )
+  log( action_argument('code') )
+  log( '2' )
+  if defined(s_name + '.signature'):
+    reconsider( s_name + '.signature_flow_complete' )
+    force_ask( s_name + '.status' )
+  
+  log( '3' )
+  if codefendant.willing_to_sign:
+    log( '4' )
+    s_name.sent_to_signature
+  #force_ask(
+  #  s_name + '.willing_to_sign',
+  #  { 'recompute': [ s_name + '.sent_to_signature' ] },
+  #  { 'recompute': [ s_name + '.signature_flow_complete' ] },
+  #  s_name + '.status'
+  #)
+---
+id: codefendant willing to sign
+generic object: Individual
+reconsider:
+  - motion_to_dismiss_for_non_essential_eviction
+  - final_form
+question: |
+  Are you willing to sign a statement attesting that ${ users[0] } TODO: WHAT ARE THEY ATTESTING?
+subquestion: |
+  You can [preview the statement](${ motion_to_dismiss_for_non_essential_eviction.pdf.url_for() }) now.
+
+  If you are willing to sign, tap to continue.  On the next screen, you will provide your signature.
+continue button field: x.willing_to_sign
+---
+id: qr code
+generic object: Individual
+code: |
+ x.interview_url_as_qr = interview_url_action_as_qr('request_signature', code=x.code)
+---
+id: Codefendant signature
+generic object: Individual
+question: |
+  Sign your name
+signature: x.signature
+under: |
+  ${ x }
+---
+generic object: Individual
+code: |
+  x.has_signed = defined( x.instanceName + '.signature' )
+---
+id: follow up on device choice or signature
+generic object: Individual
+event: x.status
+prevent going back: True
+reconsider:
+  - all_signatures_in
+  - motion_to_dismiss_for_non_essential_eviction  # needed to update final_form
+  - final_form
+question: |
+  % if not all_signatures_in:
+  The Eviction Moratorium has not been signed by everyone yet
+  % else:
+  The Eviction Moratorium has been signed by everyone
+  % endif
+subquestion: |
+  % for signer in all_signers:
+    % if defined( signer.instanceName + '.signature' ):
+    <i class="fa fa-check" aria-hidden="true"></i> ${ signer } has signed[BR]
+    % endif
+  % endfor
+  
+  % for signer in all_signers:
+    % if not defined( signer.instanceName + '.signature' ):
+    <i class="fa fa-times" aria-hidden="true"></i> ${ signer } has not signed[BR]
+    % endif
+  % endfor
+
+  ${ action_button_html('javascript:daRefreshSubmit()', label='Check again <i class="fas fa-sync-alt"></i>', size='lg') }
+attachment code: motion_to_dismiss_for_non_essential_eviction
+---
+generic object: Individual
+only sets: x.signature_flow_complete
+# reconsider: True is not enough
+#reconsider:
+#  - x.has_signed
+code: |
+  #if x.has_signed:
+  if defined( x.instanceName + '.signature' ):
+    if not defined(x.instanceName + '.signature_date'):
+      x.signature_date = today()
+    x.signature_flow_complete = True
+  else:
+    x.signature_flow_complete = False
