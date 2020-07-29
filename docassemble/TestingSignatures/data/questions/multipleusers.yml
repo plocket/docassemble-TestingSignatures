@@ -238,9 +238,9 @@ code: |
     force_ask( s_name + '.status' )
   
   log( '3' )
-  if codefendant.willing_to_sign:
+  if signer.willing_to_sign:
     log( '4' )
-    s_name.sent_to_signature
+    signer.sent_to_signature
   #force_ask(
   #  s_name + '.willing_to_sign',
   #  { 'recompute': [ s_name + '.sent_to_signature' ] },

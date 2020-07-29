@@ -16,27 +16,25 @@ metadata:
 # If needed, offer them a way to send the link to another device.
 # Direct them to the signature.
 id: generic signature flow
-#event: x.sent_to_signature
+event: x.sent_to_signature
 #reconsider: True is not sufficient
 #reconsider:
 #  - x.started_on_phone
 generic object: Individual
 code: |
-  
-  #if action_argument() and action_argument('code'):
-  #  x_name = 
-  
+  x_name = x.instanceName
   log( '5' )
   # WAT: This doesn't get logged after the signature unless the terminal case below exists. How?
-  #log('1', 'console')
-  #log( x_name )
+  log('1c', 'console')
+  log( x_name, 'console' )
+  log( x_name )
   #log( defined( x_name + '.signature' ) )
 
   # ENDING CONDITION
-  if defined( x_name + '.signature' ):
-    log( 'terminal case' )
-    x.sent_to_signature = True
-    force_ask( x_name + '.status' )
+  #if defined( x_name + '.signature' ):
+  #  log( 'terminal case' )
+  #  x.sent_to_signature = True
+  #  force_ask( x_name + '.status' )
 
   # When would device header not exist? A bot? An error?
   device_exists = not device() is None
@@ -44,55 +42,74 @@ code: |
   # If header exists and it's mobile/tablet/bot or user wants this device
   if (device_exists and not device().is_pc) or x.signature_choice == 'this device':
     log( '7' )
-    log( x.instanceName )
-    # Idempotency issue here, but why? Causes a name/w/e exception. Where above here do we lose the context or w/e?
-    # TODO: Put `willing_to_sign` in here?
+    # TODO: Put `willing_to_sign` in here
     #log('to signature', 'console')
     #log( 'to signature' )
-    x.signature  # logic for pre-defining this became obstructive
+    x.signature  # logic for defining this previously became obstructive
     log( '8' )
     x.has_signed = True
     log( '9' )
     reconsider( x_name + '.signature_flow_complete' )
     log( '10' )
-    reconsider( x_name + '.sent_to_signature' )
+    #reconsider( x_name + '.sent_to_signature' )
+    #x.sent_to_signature
+    x.status
     log( '11' )
     #x.sent_to_signature = True
   
   # if it's a PC
   else:
     x.saw_link_sending_options
+    log( 'a', 'console' )
+    log( 'a' )
     if defined( x_name + '.mobile_number' ) and x.mobile_number:
+      log( 'b', 'console' )
+      log( 'b' )
       x.send_sms_signature_link  # DEVELOPER: Define this
-
+      log( 'c', 'console' )
+      log( 'c' )
+      log( x_name, 'console' )
+      log( x_name )
       #log( 'gonna ask wait', 'console' )
-      # When the user is on the wait page and the form has been signed, no further logs are printed in the console. What gives? Always involveds `willing_to_sign`
+      # When the user is on the wait page and the form has been signed, no further logs are printed in the console. What gives?
       x.has_waited_for_signature
+      log( 'd', 'console' )
+      log( 'd' )
       #log( x.has_waited_for_signature, 'console' )
       if x.has_waited_for_signature is True:
+        log( 'has waited', 'console' )
+        log( 'has waited' )
         #log( defined( x_name + '.signature' ), 'console' )
         if defined( x_name + '.signature' ):
           # This never gets in here somehow
-          #log( 'to status', 'console' )
-          force_ask( x_name + '.status' )
+          log( 'to status', 'console' )
+          log( 'to status' )
+          #force_ask( x_name + '.status' )
+          x.status
         else:
+          log( 'e', 'console' )
+          log( 'e' )
           #log( 'wait again', 'console' )
           undefine( x_name + '.has_waited_for_signature' )
+          log( 'f', 'console' )
+          log( 'f' )
           # nts: events don't get defined, so they don't need to be redefined
           # but this causes an infinite loop
-          #x.sent_to_signature
-          reconsider( x_name + '.sent_to_signature' )
+          x.sent_to_signature
+          #reconsider( x_name + '.sent_to_signature' )
       
       # Asking to change devices. No, the name is not particularly clear.
       else:
+        log( 'g', 'console' )
+        log( 'g' )
         undefine( x_name + '.signature_choice' )
         undefine( x_name + '.saw_link_sending_options' )
         undefine( x_name + '.wants_a_text' )
         undefine( x_name + '.mobile_number' )
         undefine( x_name + '.send_sms_signature_link' )
         undefine( x_name + '.has_waited_for_signature' )
-        #x.sent_to_signature
-        reconsider( x_name + '.sent_to_signature' )
+        x.sent_to_signature
+        #reconsider( x_name + '.sent_to_signature' )
 ---
 event: x.revise_signature_device
 generic object: Individual
